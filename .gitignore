@@ -34,10 +34,12 @@ vendor/
 .idea/
 .DS_Store
 
-config.json
+/config.json
 *.txt
 *_sample
 *_temp
 
 overture-*
 *.log
+
+config.dev.json

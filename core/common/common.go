@@ -7,20 +7,26 @@ package common
 
 import (
 	"net"
+	"regexp"
 	"strings"
 
-	log "github.com/Sirupsen/logrus"
 	"github.com/miekg/dns"
+	log "github.com/sirupsen/logrus"
 )
 
-var ReservedIPNetworkList = getReservedIPNetworkList()
+var ReservedIPNetworkList []*net.IPNet
 
-func IsIPMatchList(ip net.IP, ipnl []*net.IPNet, isLog bool) bool {
+func init() {
+
+	ReservedIPNetworkList = getReservedIPNetworkList()
+}
+
+func IsIPMatchList(ip net.IP, ipnl []*net.IPNet, isLog bool, name string) bool {
 
 	for _, ip_net := range ipnl {
 		if ip_net.Contains(ip) {
 			if isLog {
-				log.Debug("Matched: IP network " + ip.String() + " " + ip_net.String())
+				log.Debug("Matched: IP network " + name + " " + ip.String() + " " + ip_net.String())
 			}
 			return true
 		}
@@ -29,14 +35,15 @@ func IsIPMatchList(ip net.IP, ipnl []*net.IPNet, isLog bool) bool {
 	return false
 }
 
-func IsAnswerEmpty(m *dns.Msg) bool {
-
-	if len(m.Answer) == 0 {
-		return true
+func IsDomainMatchRule(pattern string, domain string) bool {
+	matched, err := regexp.MatchString(pattern, domain)
+	if err != nil {
+		log.Warn("Domain:"+domain+" Pattern:"+pattern+" error!", err)
 	}
-
-	return false
+	return matched
 }
+
+func HasAnswer(m *dns.Msg) bool { return m != nil && len(m.Answer) != 0 }
 
 func HasSubDomain(s string, sub string) bool {
 
@@ -67,4 +74,30 @@ func FindRecordByType(msg *dns.Msg, t uint16) string {
 	}
 
 	return ""
+}
+
+func SetMinimumTTL(msg *dns.Msg, minimumTTL uint32) {
+
+	if minimumTTL == 0 {
+		return
+	}
+	for _, a := range msg.Answer {
+		if a.Header().Ttl < minimumTTL {
+			a.Header().Ttl = minimumTTL
+		}
+	}
+}
+
+func SetTTLByMap(msg *dns.Msg, domainTTLMap map[string]uint32) {
+	if len(domainTTLMap) == 0 {
+		return
+	}
+	for _, a := range msg.Answer {
+		name := a.Header().Name[:len(a.Header().Name)-1]
+		for k, v := range domainTTLMap {
+			if IsDomainMatchRule(k, name) {
+				a.Header().Ttl = v
+			}
+		}
+	}
 }
